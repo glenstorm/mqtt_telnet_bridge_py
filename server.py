@@ -7,6 +7,7 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
 		self.start_poll=False
 		self.broker_address="127.0.0.1"
 		self.client = mqtt.Client()
+		self.client.messages = []
 		self.client.on_message=self.on_message
 		self.client.connect(self.broker_address)
 		print("Connect to mqtt: {0}".format(self.client_address))
@@ -34,11 +35,19 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
 				self.client.subscribe(topic)
 			elif self.data == "poll":
 				print("poll for client '{0}'".format(self.client_address))
+				#flush accumulated messages
+				for topic, value in self.client.messages:
+					self.request.sendall("{0}: {1}\n".format(topic, value).encode())
+				self.client.messages = []
 				self.start_poll = True
+			else:
+				self.request.sendall("Неверная команда. Используйте 'subscribe <topic>' или 'poll'.\n".encode())
 
 	def on_message(self, client, userdata, message):
 		if self.start_poll:
 			self.request.sendall("{0}: {1}\n".format(message.topic, message.payload.decode("utf-8")).encode())
+		else:
+			self.client.messages.append((message.topic, message.payload.decode("utf-8"))) #accumulate msgs without sending
 
 if __name__ == "__main__":
 	HOST, PORT = "localhost", 1234
